@@ -1,13 +1,13 @@
-package com.example.microservicio_cuentas;
+package com.pruebatecnica.accounts;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class MicroservicioCuentasApplication {
+public class AccountsServiceApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(MicroservicioCuentasApplication.class, args);
+		SpringApplication.run(AccountsServiceApplication.class, args);
 	}
 
 }
