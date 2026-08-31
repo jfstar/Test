@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Solo trae las reglas de conversion/propiedades por defecto de Spring
+         Boot (colores, %clr, etc.), NO sus appenders: se define un unico
+         appender propio en JSON para que "logs estructurados" sea real y no
+         solo texto plano con formato distinto. -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <!-- correlationId (ver CorrelationIdFilter) queda como campo de
+                 primer nivel en el JSON, no enterrado en un mensaje de texto:
+                 permite filtrar/agregar logs por peticion en cualquier
+                 sistema de log shipping (ELK, Loki, CloudWatch, etc.) sin
+                 parsear el mensaje. -->
+            <includeMdcKeyName>correlationId</includeMdcKeyName>
+            <customFields>{"service":"microservicio-cuentas"}</customFields>
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <message>message</message>
+                <logger>logger</logger>
+                <thread>thread</thread>
+                <level>level</level>
+            </fieldNames>
+        </encoder>
+    </appender>
+
+    <!-- logging.level.* en application.yml sigue controlando los niveles
+         efectivos (Spring Boot los aplica encima de esta configuracion);
+         estos son solo los valores por defecto si no se sobreescriben. -->
+    <root level="INFO">
+        <appender-ref ref="JSON_CONSOLE"/>
+    </root>
+</configuration>
