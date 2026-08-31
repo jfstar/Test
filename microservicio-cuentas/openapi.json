@@ -1,0 +1,341 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Microservicio de Cuentas y Movimientos",
+    "description": "API para alta de cuentas y registro de movimientos (CREDIT/DEBIT) con validacion de saldo, idempotencia e integracion resiliente con un servicio externo de validacion. Prueba tecnica - Desarrollador Java Senior.",
+    "contact": {
+      "name": "Equipo de Desarrollo"
+    },
+    "version": "v0.1.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Generated server url"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Cuentas",
+      "description": "Alta de cuentas y registro de movimientos"
+    }
+  ],
+  "paths": {
+    "/accounts": {
+      "post": {
+        "tags": [
+          "Cuentas"
+        ],
+        "summary": "Crea una cuenta nueva con saldo inicial >= 0",
+        "operationId": "createAccount",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Cuenta creada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos de entrada invalidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/{id}/transactions": {
+      "post": {
+        "tags": [
+          "Cuentas"
+        ],
+        "summary": "Registra un movimiento (CREDIT/DEBIT) sobre la cuenta",
+        "description": "Un DEBIT que exceda el saldo disponible se rechaza con 409. Si se envia la cabecera Idempotency-Key y ya existe un movimiento con esa misma clave para la cuenta, se devuelve el movimiento original (200) sin duplicarlo.",
+        "operationId": "createTransaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Clave de idempotencia provista por el cliente",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTransactionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Movimiento ya existente devuelto por idempotencia (reintento)",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Movimiento registrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos de entrada invalidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cuenta inexistente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Saldo insuficiente para el debito solicitado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/{id}": {
+      "get": {
+        "tags": [
+          "Cuentas"
+        ],
+        "summary": "Obtiene una cuenta por id, incluyendo su saldo actual",
+        "operationId": "getAccount",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cuenta encontrada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cuenta inexistente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateAccountRequest": {
+        "required": [
+          "saldoInicial",
+          "titular"
+        ],
+        "type": "object",
+        "properties": {
+          "titular": {
+            "maxLength": 150,
+            "minLength": 0,
+            "type": "string",
+            "description": "Nombre del titular de la cuenta",
+            "example": "Maria Perez"
+          },
+          "saldoInicial": {
+            "minimum": 0,
+            "exclusiveMinimum": false,
+            "type": "number",
+            "description": "Saldo inicial de la cuenta, debe ser >= 0",
+            "example": 100
+          }
+        },
+        "description": "Datos para crear una cuenta nueva"
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "detalles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Estructura estandar de error"
+      },
+      "AccountResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "titular": {
+            "type": "string"
+          },
+          "saldo": {
+            "type": "number"
+          },
+          "fechaCreacion": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "Datos publicos de una cuenta"
+      },
+      "CreateTransactionRequest": {
+        "required": [
+          "monto",
+          "tipo"
+        ],
+        "type": "object",
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "description": "Tipo de movimiento",
+            "example": "DEBIT",
+            "enum": [
+              "CREDIT",
+              "DEBIT"
+            ]
+          },
+          "monto": {
+            "minimum": 0.01,
+            "exclusiveMinimum": false,
+            "type": "number",
+            "description": "Monto del movimiento, debe ser mayor que 0",
+            "example": 25.5
+          }
+        },
+        "description": "Datos para registrar un movimiento sobre una cuenta"
+      },
+      "TransactionResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cuentaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "CREDIT",
+              "DEBIT"
+            ]
+          },
+          "monto": {
+            "type": "number"
+          },
+          "saldoResultante": {
+            "type": "number"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "replay": {
+            "type": "boolean",
+            "description": "true si esta respuesta corresponde a un movimiento ya existente devuelto por una repeticion con la misma Idempotency-Key"
+          }
+        },
+        "description": "Resultado de un movimiento registrado"
+      }
+    }
+  }
+}

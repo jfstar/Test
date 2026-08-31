@@ -1,0 +1,15 @@
+{
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/validate"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "aprobado": true,
+      "motivo": "Validacion aprobada (stub WireMock, mapping por defecto)"
+    }
+  }
+}

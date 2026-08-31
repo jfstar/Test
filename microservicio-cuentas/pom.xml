@@ -96,6 +96,12 @@
         <!-- WireMock embebido: simula el servicio externo de validacion en las
              pruebas de integracion (mismo tipo de stub que third-party-stub/,
              pero corriendo dentro del proceso de test, sin depender de Docker). -->
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <version>3.9.1</version>
+            <scope>test</scope>
+        </dependency>
 
 	</dependencies>
 

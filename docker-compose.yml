@@ -1,0 +1,109 @@
+name: prueba-tecnica-cuentas
+
+services:
+  # ------------------------------------------------------------------
+  # SQL Server Developer (gratuita). Datos persistidos en el volumen
+  # "sqlserver-data" para sobrevivir a docker compose down.
+  # ------------------------------------------------------------------
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: cuentas-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Define MSSQL_SA_PASSWORD en un archivo .env (ver .env.example)}
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -N -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 25s
+
+  # ------------------------------------------------------------------
+  # Job de un solo uso: aplica schema.sql, sp_estado_cuenta.sql y
+  # datos_prueba.sql (Tarea 2) contra sqlserver una vez que esta sana.
+  # No expone puertos ni queda residente.
+  # ------------------------------------------------------------------
+  sqlserver-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: cuentas-sqlserver-init
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Define MSSQL_SA_PASSWORD en un archivo .env (ver .env.example)}
+    volumes:
+      - ./sql-server:/scripts:ro
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        set -e
+        SQLCMD="/opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -P $$MSSQL_SA_PASSWORD -C -N"
+        echo "Aplicando schema.sql..."
+        $$SQLCMD -i /scripts/schema.sql
+        echo "Creando sp_estado_cuenta..."
+        $$SQLCMD -i /scripts/sp_estado_cuenta.sql
+        echo "Cargando datos_prueba.sql..."
+        $$SQLCMD -i /scripts/datos_prueba.sql
+        echo "Inicializacion de base de datos completa."
+
+  # ------------------------------------------------------------------
+  # Stub del servicio externo de validacion (Tarea 3), vía WireMock.
+  # Corre como contenedor independiente para poder apagarlo/prenderlo de
+  # verdad (docker compose stop/start third-party-validator) y demostrar
+  # el comportamiento resiliente de la app ante un tercero caido.
+  # ------------------------------------------------------------------
+  third-party-validator:
+    image: wiremock/wiremock:3.9.1-alpine
+    container_name: cuentas-third-party-validator
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./third-party-stub/mappings:/home/wiremock/mappings:ro
+
+  # ------------------------------------------------------------------
+  # Microservicio de cuentas y movimientos (Tarea 1), conectado a la
+  # SQL Server de este mismo compose mediante el perfil "sqlserver", y al
+  # stub de validacion externa (Tarea 3).
+  # ------------------------------------------------------------------
+  app:
+    build:
+      context: ./microservicio-cuentas
+    container_name: cuentas-app
+    depends_on:
+      sqlserver-init:
+        condition: service_completed_successfully
+      third-party-validator:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: sqlserver
+      DB_URL: "jdbc:sqlserver://sqlserver:1433;databaseName=CuentasDB;encrypt=true;trustServerCertificate=true"
+      DB_USERNAME: sa
+      DB_PASSWORD: ${MSSQL_SA_PASSWORD:?Define MSSQL_SA_PASSWORD en un archivo .env (ver .env.example)}
+      VALIDATION_SERVICE_URL: "http://third-party-validator:8080"
+    ports:
+      - "8080:8080"
+
+  # ------------------------------------------------------------------
+  # Prometheus (Tarea 5, bonus). Hace scraping de /actuator/prometheus
+  # cada 10s (ver monitoring/prometheus.yml). UI en http://localhost:9090
+  # ------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: cuentas-prometheus
+    depends_on:
+      - app
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+
+volumes:
+  sqlserver-data:
+  prometheus-data:
